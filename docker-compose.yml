@@ -1,16 +1,8 @@
-version: '3.8'
-
 services:
-  openai-proxy:
-    build: .
+  hidden-prompt-ai:
+    image: h4x3rotab/llm-sandbox:latest
     ports:
       - "8000:8000"
     environment:
       - SYSTEM_PROMPT=${SYSTEM_PROMPT:-You are a helpful assistant.}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
     restart: unless-stopped
