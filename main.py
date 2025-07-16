@@ -31,6 +31,23 @@ class ChatCompletionRequest(BaseModel):
     logit_bias: Optional[Dict[str, float]] = None
     user: Optional[str] = None
 
+class CompletionRequest(BaseModel):
+    model: str
+    prompt: str
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    stream: Optional[bool] = False
+    stop: Optional[List[str]] = None
+    presence_penalty: Optional[float] = None
+    frequency_penalty: Optional[float] = None
+    logit_bias: Optional[Dict[str, float]] = None
+    user: Optional[str] = None
+    suffix: Optional[str] = None
+    echo: Optional[bool] = None
+    best_of: Optional[int] = None
+    logprobs: Optional[int] = None
+
 def inject_system_prompt(messages: List[ChatMessage]) -> List[ChatMessage]:
     """Inject system prompt as the first message if SYSTEM_PROMPT is set"""
     if not SYSTEM_PROMPT:
@@ -64,10 +81,13 @@ async def forward_to_openai(request_data: dict, api_key: str, endpoint: str, str
     async with httpx.AsyncClient(timeout=300.0) as client:
         if method == "GET":
             response = await client.get(url, headers=headers)
-        elif stream:
-            response = await client.post(url, json=request_data, headers=headers, stream=True)
         else:
-            response = await client.post(url, json=request_data, headers=headers)
+            # For streaming, we need to use the stream method differently
+            if stream:
+                request = client.build_request("POST", url, json=request_data, headers=headers)
+                response = await client.send(request, stream=True)
+            else:
+                response = await client.post(url, json=request_data, headers=headers)
         
         if response.status_code != 200:
             error_content = await response.aread() if stream else response.content
@@ -100,19 +120,102 @@ async def chat_completions(
     
     # Forward to OpenAI
     if request.stream:
-        response = await forward_to_openai(openai_request, api_key, "chat/completions", stream=True)
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        url = f"{OPENAI_BASE_URL}/chat/completions"
+        request_body = json.dumps(openai_request).encode('utf-8')
+        
+        client = httpx.AsyncClient(timeout=300.0)
+        req = client.build_request("POST", url, content=request_body, headers=headers)
+        response = await client.send(req, stream=True)
+        
+        if response.status_code != 200:
+            error_content = await response.aread()
+            await response.aclose()
+            await client.aclose()
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=json.loads(error_content.decode()) if error_content else "OpenAI API Error"
+            )
         
         async def stream_generator():
-            async for chunk in response.aiter_text():
-                yield chunk
+            try:
+                async for chunk in response.aiter_text():
+                    yield chunk
+            finally:
+                await response.aclose()
+                await client.aclose()
         
         return StreamingResponse(
             stream_generator(),
-            media_type="text/plain",
-            headers={"Content-Type": "text/plain; charset=utf-8"}
+            media_type="text/plain"
         )
     else:
         response = await forward_to_openai(openai_request, api_key, "chat/completions")
+        return JSONResponse(content=response.json())
+
+@app.post("/v1/completions")
+async def completions(
+    request: CompletionRequest,
+    authorization: str = Header(None)
+):
+    """OpenAI-compatible completions endpoint with system prompt injection"""
+    
+    # Extract API key from Authorization header
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    
+    api_key = authorization.replace("Bearer ", "")
+    
+    # Inject system prompt by prepending it to the user's prompt
+    modified_prompt = request.prompt
+    if SYSTEM_PROMPT:
+        modified_prompt = f"{SYSTEM_PROMPT}\n\n{request.prompt}"
+    
+    # Prepare request for OpenAI
+    openai_request = request.model_dump(exclude_none=True)
+    openai_request["prompt"] = modified_prompt
+    
+    # Forward to OpenAI
+    if request.stream:
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        url = f"{OPENAI_BASE_URL}/completions"
+        request_body = json.dumps(openai_request).encode('utf-8')
+        
+        client = httpx.AsyncClient(timeout=300.0)
+        req = client.build_request("POST", url, content=request_body, headers=headers)
+        response = await client.send(req, stream=True)
+        
+        if response.status_code != 200:
+            error_content = await response.aread()
+            await response.aclose()
+            await client.aclose()
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=json.loads(error_content.decode()) if error_content else "OpenAI API Error"
+            )
+        
+        async def stream_generator():
+            try:
+                async for chunk in response.aiter_text():
+                    yield chunk
+            finally:
+                await response.aclose()
+                await client.aclose()
+        
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/plain"
+        )
+    else:
+        response = await forward_to_openai(openai_request, api_key, "completions")
         return JSONResponse(content=response.json())
 
 @app.get("/v1/models")
