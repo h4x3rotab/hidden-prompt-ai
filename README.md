@@ -1,4 +1,4 @@
-# OpenAI Compatible Proxy with System Prompt Injection
+# Hidden Prompt AI
 
 A lightweight proxy server that sits between clients and the OpenAI API, automatically injecting a system prompt configured via environment variables. Perfect for monetizing custom prompts without revealing their content.
 
