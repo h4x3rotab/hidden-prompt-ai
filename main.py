@@ -57,11 +57,13 @@ def inject_system_prompt(messages: List[ChatMessage]) -> List[ChatMessage]:
     has_system_message = any(msg.role == "system" for msg in messages)
     
     if has_system_message:
-        # Replace existing system message with our injected one
+        # Prepend our system prompt to existing system message
         modified_messages = []
         for msg in messages:
             if msg.role == "system":
-                modified_messages.append(ChatMessage(role="system", content=SYSTEM_PROMPT))
+                # Combine our system prompt with user's system message
+                combined_content = f"{SYSTEM_PROMPT}\n\n{msg.content}"
+                modified_messages.append(ChatMessage(role="system", content=combined_content))
             else:
                 modified_messages.append(msg)
         return modified_messages
