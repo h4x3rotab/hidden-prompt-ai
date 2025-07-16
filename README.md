@@ -4,62 +4,32 @@ A lightweight proxy server that sits between clients and the OpenAI API, automat
 
 ## Features
 
-- **OpenAI Compatible**: Fully compatible with OpenAI API endpoints
+- **Full OpenAI API Compatibility**: Supports both chat completions and text completions
 - **System Prompt Injection**: Automatically injects a configured system prompt into all requests
 - **User API Key**: Users provide their own OpenAI API key (developer doesn't pay for usage)
-- **Docker Ready**: Easy deployment with Docker and Docker Compose
+- **Docker Ready**: Easy deployment with pre-built Docker image
 - **Streaming Support**: Supports both streaming and non-streaming responses
-- **Health Checks**: Built-in health check endpoint
+- **Self-contained Testing**: Comprehensive test suite validates all functionality
 
 ## Quick Start
 
-### Using Docker Compose (Recommended)
+### Using Pre-built Docker Image (Fastest)
 
-1. Clone or download this project
-2. Set your system prompt in environment variable:
-   ```bash
-   export SYSTEM_PROMPT="You are an expert financial advisor with 20 years of experience."
-   ```
-
-3. Run with Docker Compose:
-   ```bash
-   docker-compose up -d
-   ```
-
-### Using Docker
-
-1. Build the image:
-   ```bash
-   docker build -t openai-proxy .
-   ```
-
-2. Run the container:
-   ```bash
-   docker run -d -p 8000:8000 \
-     -e SYSTEM_PROMPT="Your custom system prompt here" \
-     openai-proxy
-   ```
+```bash
+docker run -d -p 8000:8000 \
+  -e SYSTEM_PROMPT="You are an expert financial advisor with 20 years of experience." \
+  h4x3rotab/llm-sandbox:latest
+```
 
 ### Local Development
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+```bash
+pip install -r requirements.txt
+export SYSTEM_PROMPT="Your custom system prompt here"
+python main.py
+```
 
-2. Set environment variable:
-   ```bash
-   export SYSTEM_PROMPT="Your custom system prompt here"
-   ```
-
-3. Run the server:
-   ```bash
-   python main.py
-   ```
-
-## Usage
-
-The proxy server runs on port 8000 and provides the following endpoints:
+## API Endpoints
 
 ### Chat Completions
 ```bash
@@ -68,92 +38,99 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Authorization: Bearer YOUR_OPENAI_API_KEY" \
   -d '{
     "model": "gpt-3.5-turbo",
-    "messages": [
-      {"role": "user", "content": "What is the weather like?"}
-    ]
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
   }'
 ```
 
-### List Models
+### Text Completions
 ```bash
-curl -X GET http://localhost:8000/v1/models \
-  -H "Authorization: Bearer YOUR_OPENAI_API_KEY"
+curl -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-3.5-turbo-instruct",
+    "prompt": "Once upon a time",
+    "max_tokens": 100
+  }'
 ```
 
-### Health Check
-```bash
-curl -X GET http://localhost:8000/health
-```
+### Other Endpoints
+- `GET /v1/models` - List available models
+- `GET /health` - Health check
 
 ## How It Works
 
-1. **System Prompt Injection**: The configured `SYSTEM_PROMPT` is automatically injected as the first message in every chat completion request
-2. **API Key Passthrough**: Users provide their own OpenAI API key in the Authorization header
-3. **Transparent Proxy**: All other parameters and responses are passed through unchanged
-4. **Prompt Protection**: The actual system prompt is never exposed to users
+1. **System Prompt Injection**: 
+   - **Chat Completions**: Injected as first system message
+   - **Text Completions**: Prepended to user's prompt
+2. **API Key Passthrough**: Users provide their own OpenAI API key
+3. **Transparent Proxy**: All other parameters passed through unchanged
+4. **Prompt Protection**: System prompt never exposed to users
 
 ## Configuration
 
-### Environment Variables
-
-- `SYSTEM_PROMPT`: The system prompt to inject into all requests (required)
-
-### Example System Prompts
+Set your system prompt via environment variable:
 
 ```bash
-# Simple assistant
-SYSTEM_PROMPT="You are a helpful assistant that always responds professionally."
-
 # Expert advisor
-SYSTEM_PROMPT="You are an expert financial advisor with 20 years of experience. Provide detailed analysis and actionable recommendations."
+SYSTEM_PROMPT="You are an expert financial advisor with 20 years of experience."
+
+# Code reviewer  
+SYSTEM_PROMPT="You are a senior software engineer specializing in code reviews."
 
 # Creative writer
-SYSTEM_PROMPT="You are a professional creative writer specializing in storytelling. Always structure your responses with vivid descriptions and engaging narratives."
+SYSTEM_PROMPT="You are a professional creative writer specializing in storytelling."
 ```
+
+## Testing
+
+Run the comprehensive test suite:
+
+```bash
+export OPENAI_API_KEY=your_key_here
+python test_proxy.py
+```
+
+The test suite automatically starts the server, tests all endpoints, validates streaming and system prompt injection, then stops the server.
 
 ## Monetization Use Cases
 
-This proxy is perfect for:
-
-- **Prompt Engineering Services**: Sell access to your optimized prompts
-- **Specialized AI Assistants**: Create domain-specific AI assistants
+- **Prompt Engineering Services**: Sell access to optimized prompts
+- **Specialized AI Assistants**: Create domain-specific AI assistants  
 - **API White-labeling**: Provide custom AI services under your brand
-- **Consultation Services**: Offer AI-powered consultation with custom expertise
-
-## API Compatibility
-
-The proxy is fully compatible with OpenAI's API, supporting:
-
-- Chat completions (streaming and non-streaming)
-- Model listing
-- All standard parameters (temperature, max_tokens, etc.)
-- Error handling and status codes
-
-## Security Considerations
-
-- Users provide their own API keys (no key sharing)
-- System prompt is never exposed to users
-- Built-in health checks for monitoring
-- Runs as non-root user in Docker
+- **Educational Tools**: Create subject-specific AI tutors
 
 ## Deployment
 
-### Production Deployment
-
-For production use, consider:
-
-1. **Environment Variables**: Use Docker secrets or environment variable management
-2. **Load Balancing**: Deploy multiple instances behind a load balancer
-3. **Monitoring**: Set up monitoring and alerting for the health check endpoint
-4. **HTTPS**: Use a reverse proxy (nginx, Cloudflare) for HTTPS termination
-
-### Scaling
-
-The proxy is stateless and can be easily scaled horizontally:
-
+### Production
 ```bash
+# Pull and run
+docker pull h4x3rotab/llm-sandbox:latest
+docker run -d -p 8000:8000 -e SYSTEM_PROMPT="Your prompt" h4x3rotab/llm-sandbox:latest
+
+# Scale horizontally
 docker-compose up -d --scale openai-proxy=3
 ```
+
+### Security
+- Users provide their own API keys (no key sharing)
+- System prompt never exposed to users
+- Runs as non-root user in Docker
+- Stateless architecture
+
+## Development
+
+```
+├── main.py              # Main proxy server
+├── test_proxy.py        # Comprehensive test suite  
+├── requirements.txt     # Python dependencies
+├── Dockerfile          # Container configuration
+├── docker-compose.yml  # Docker Compose setup
+└── README.md           # This file
+```
+
+Run tests before contributing: `python test_proxy.py`
 
 ## License
 
